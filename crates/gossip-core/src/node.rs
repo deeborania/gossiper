@@ -55,6 +55,11 @@ impl<T> GossipNode<T> {
         self.rumors.insert(rumor)
     }
 
+    /// Publishes a local rumor from this node.
+    pub fn publish(&mut self, id: MessageId, round: Round, payload: T) -> InsertOutcome {
+        self.insert_rumor(Rumor::new(id, self.self_id.clone(), round, payload))
+    }
+
     /// Returns the number of known rumors.
     pub fn rumor_count(&self) -> usize {
         self.rumors.len()
@@ -361,5 +366,22 @@ mod tests {
             }
             Effect::Emit(()) => panic!("expected send effect"),
         }
+    }
+
+    #[test]
+    fn publishes_local_rumor_with_self_as_origin() {
+        let mut node = GossipNode::new(NodeId::from("node-a"), GossipConfig::default());
+
+        let outcome = node.publish(MessageId::new(1), Round::new(7), "hello");
+
+        assert_eq!(outcome, InsertOutcome::Inserted);
+
+        let stored = node
+            .get_rumor(MessageId::new(1))
+            .expect("rumor should be stored");
+
+        assert_eq!(stored.origin(), &NodeId::from("node-a"));
+        assert_eq!(stored.created_at(), Round::new(7));
+        assert_eq!(stored.payload(), &"hello");
     }
 }

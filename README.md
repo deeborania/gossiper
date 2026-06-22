@@ -46,7 +46,7 @@ The lower-level crates exist to keep the design modular.
 ```rust
 use gossiper::{
     apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageId, NodeId,
-    Round, Rumor,
+    Round,
 };
 
 let config = GossipConfig::new(1, 10).expect("valid config");
@@ -60,9 +60,7 @@ let mut node_b = GossipNode::new(node_b_id.clone(), config);
 node_a.set_peers(vec![node_b_id.clone()]);
 
 let rumor_id = MessageId::new(1);
-let rumor = Rumor::new(rumor_id, node_a_id, Round::ZERO, "hello");
-
-node_a.insert_rumor(rumor);
+node_a.publish(rumor_id, Round::ZERO, "hello");
 
 let mut rng = DeterministicRng::new(1);
 let effects = node_a.tick(&mut rng, Round::ZERO);

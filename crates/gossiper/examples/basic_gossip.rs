@@ -1,6 +1,6 @@
 use gossiper::{
     apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageId, NodeId,
-    Round, Rumor,
+    Round,
 };
 
 fn main() {
@@ -15,14 +15,7 @@ fn main() {
     node_a.set_peers(vec![node_b_id.clone()]);
 
     let rumor_id = MessageId::new(1);
-    let rumor = Rumor::new(
-        rumor_id,
-        node_a_id.clone(),
-        Round::ZERO,
-        "cluster config changed",
-    );
-
-    node_a.insert_rumor(rumor);
+    node_a.publish(rumor_id, Round::ZERO, "cluster config changed");
 
     let mut rng = DeterministicRng::new(1);
     let effects = node_a.tick(&mut rng, Round::ZERO);
