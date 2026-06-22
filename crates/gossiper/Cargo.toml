@@ -1,0 +1,18 @@
+[package]
+name = "gossiper"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Reusable gossip protocol building blocks for Rust"
+repository = "https://github.com/deeborania/gossip-rust"
+readme = "README.md"
+
+[features]
+default = ["transport"]
+transport = ["dep:gossip-transport"]
+sim = ["transport", "dep:gossip-sim"]
+
+[dependencies]
+gossip-core = { path = "../gossip-core" }
+gossip-transport = { path = "../gossip-transport", optional = true }
+gossip-sim = { path = "../gossip-sim", optional = true }

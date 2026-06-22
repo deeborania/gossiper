@@ -1,0 +1,21 @@
+# Rust build output
+/target/
+
+# Cargo packaging output
+*.crate
+
+# Local environment files
+.env
+.env.*
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local logs and temporary files
+*.log
+tmp/
+temp/

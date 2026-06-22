@@ -1,0 +1,10 @@
+[package]
+name = "gossip-sim"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Simulation utilities for gossip protocol implementations"
+
+[dependencies]
+gossip-core = { path = "../gossip-core" }
+gossip-transport = { path = "../gossip-transport" }
