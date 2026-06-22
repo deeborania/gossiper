@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 use crate::{MessageId, Round, Rumor};
 
 /// Result of inserting a rumor into a store.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InsertOutcome {
     /// The rumor was newly inserted.

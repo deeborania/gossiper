@@ -3,6 +3,7 @@
 use core::fmt;
 
 /// Configuration for gossip behavior.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GossipConfig {
     fanout: usize,
@@ -89,6 +90,7 @@ impl Default for GossipConfig {
 }
 
 /// Error returned when creating an invalid gossip configuration.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConfigError {
     /// Fanout must be greater than zero.

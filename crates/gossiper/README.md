@@ -85,9 +85,9 @@ gossiper = { version = "0.1", features = ["sim"] }
 
 ## Workspace Crates
 
-- `gossip-core`: protocol state machine and core data types
-- `gossip-transport`: transport traits and in-memory transport
-- `gossip-sim`: deterministic simulation utilities
+- `gossiper-core`: protocol state machine and core data types
+- `gossiper-transport`: transport traits and in-memory transport
+- `gossiper-sim`: deterministic simulation utilities
 - `gossiper`: user-facing facade crate
 
 ## Design Principle

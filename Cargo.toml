@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/gossip-core",
-  "crates/gossip-transport",
-  "crates/gossip-sim",
+  "crates/gossiper-core",
+  "crates/gossiper-transport",
+  "crates/gossiper-sim",
   "crates/gossiper",
 ]

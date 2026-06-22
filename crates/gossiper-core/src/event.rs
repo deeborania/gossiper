@@ -3,6 +3,7 @@
 use crate::Rumor;
 
 /// An event produced by a gossip node when processing protocol input.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GossipEvent<T> {
     /// The node accepted a rumor it did not already know.

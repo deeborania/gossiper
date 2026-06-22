@@ -6,11 +6,11 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use gossip_core::{
+use gossiper_core::{
     DeterministicRng, Effect, GossipConfig, GossipEvent, GossipMessage, GossipNode, InsertOutcome,
     MessageId, NodeId, RandomSource, Round, Rumor,
 };
-use gossip_transport::{apply_effects, EffectReport, InMemoryTransport};
+use gossiper_transport::{apply_effects, EffectReport, InMemoryTransport};
 
 /// A node managed by a simulation cluster.
 #[derive(Clone, Debug)]
@@ -1804,7 +1804,7 @@ mod tests {
         ConvergenceReport, ConvergenceScenario, ExperimentError, NetworkModel, NetworkPartition,
         ReachReport, RunReport,
     };
-    use gossip_core::{GossipConfig, InsertOutcome, MessageId, NodeId, Round};
+    use gossiper_core::{GossipConfig, InsertOutcome, MessageId, NodeId, Round};
 
     #[test]
     fn cluster_connects_all_nodes_as_peers() {

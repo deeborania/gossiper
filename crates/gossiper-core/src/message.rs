@@ -3,6 +3,7 @@
 use crate::Rumor;
 
 /// A protocol message exchanged between gossip nodes.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GossipMessage<T> {
     /// Carries rumors to another node.

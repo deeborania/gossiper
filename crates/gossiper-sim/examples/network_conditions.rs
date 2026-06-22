@@ -1,5 +1,5 @@
-use gossip_core::{GossipConfig, MessageId, NodeId, Round};
-use gossip_sim::{Cluster, NetworkModel, NetworkPartition};
+use gossiper_core::{GossipConfig, MessageId, NodeId, Round};
+use gossiper_sim::{Cluster, NetworkModel, NetworkPartition};
 
 fn percent(rate: f64) -> f64 {
     rate * 100.0

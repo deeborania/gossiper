@@ -1,4 +1,4 @@
-use gossip_sim::{ConvergenceComparison, ConvergenceExperiment, ConvergenceReport, NetworkModel};
+use gossiper_sim::{ConvergenceComparison, ConvergenceExperiment, ConvergenceReport, NetworkModel};
 
 fn percent(rate: f64) -> f64 {
     rate * 100.0

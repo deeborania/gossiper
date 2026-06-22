@@ -1,0 +1,13 @@
+[package]
+name = "gossiper-transport"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Transport traits and in-memory helpers for gossip protocol implementations."
+repository = "https://github.com/deeborania/gossip-rust"
+readme = "README.md"
+keywords = ["gossip", "transport", "protocol", "networking"]
+categories = ["network-programming"]
+
+[dependencies]
+gossiper-core = { version = "0.1.0", path = "../gossiper-core" }

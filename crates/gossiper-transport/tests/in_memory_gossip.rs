@@ -1,5 +1,5 @@
-use gossip_core::{DeterministicRng, GossipConfig, GossipNode, MessageId, NodeId, Round, Rumor};
-use gossip_transport::{apply_effects, InMemoryTransport};
+use gossiper_core::{DeterministicRng, GossipConfig, GossipNode, MessageId, NodeId, Round, Rumor};
+use gossiper_transport::{apply_effects, InMemoryTransport};
 
 fn rumor(id: u128, payload: &'static str) -> Rumor<&'static str> {
     Rumor::new(

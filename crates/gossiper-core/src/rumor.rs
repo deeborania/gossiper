@@ -6,6 +6,7 @@ use crate::{MessageId, NodeId, Round};
 ///
 /// The payload is generic because the core protocol should not know what the
 /// application-level rumor means.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rumor<T> {
     id: MessageId,

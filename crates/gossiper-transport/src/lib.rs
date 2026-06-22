@@ -9,7 +9,7 @@
 use core::fmt;
 use std::collections::{BTreeMap, VecDeque};
 
-use gossip_core::{Effect, NodeId};
+use gossiper_core::{Effect, NodeId};
 
 /// Error returned by a gossip transport.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -182,7 +182,7 @@ where
 mod tests {
     use super::InMemoryTransport;
     use super::{Transport, TransportError};
-    use gossip_core::{Effect, NodeId};
+    use gossiper_core::{Effect, NodeId};
 
     #[derive(Default)]
     struct RecordingTransport {

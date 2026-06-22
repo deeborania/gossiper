@@ -1,0 +1,14 @@
+[package]
+name = "gossiper-sim"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Deterministic simulation utilities for gossip protocol implementations."
+repository = "https://github.com/deeborania/gossip-rust"
+readme = "README.md"
+keywords = ["gossip", "simulation", "protocol", "testing"]
+categories = ["network-programming", "simulation"]
+
+[dependencies]
+gossiper-core = { version = "0.1.0", path = "../gossiper-core" }
+gossiper-transport = { version = "0.1.0", path = "../gossiper-transport" }

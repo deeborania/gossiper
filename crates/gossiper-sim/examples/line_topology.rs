@@ -1,5 +1,5 @@
-use gossip_core::{GossipConfig, MessageId, NodeId, Round};
-use gossip_sim::Cluster;
+use gossiper_core::{GossipConfig, MessageId, NodeId, Round};
+use gossiper_sim::Cluster;
 
 fn main() {
     let mut cluster = Cluster::line(GossipConfig::new(1, 32).expect("valid config"), 5);

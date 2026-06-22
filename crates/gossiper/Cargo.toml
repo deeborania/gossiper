@@ -6,16 +6,19 @@ license = "MIT OR Apache-2.0"
 description = "Reusable gossip protocol building blocks for Rust"
 repository = "https://github.com/deeborania/gossip-rust"
 readme = "README.md"
+keywords = ["gossip", "protocol", "distributed", "networking"]
+categories = ["network-programming"]
 
 [features]
 default = ["transport"]
-transport = ["dep:gossip-transport"]
-sim = ["transport", "dep:gossip-sim"]
+transport = ["dep:gossiper-transport"]
+sim = ["transport", "dep:gossiper-sim"]
+serde = ["gossiper-core/serde"]
 
 [dependencies]
-gossip-core = { path = "../gossip-core" }
-gossip-transport = { path = "../gossip-transport", optional = true }
-gossip-sim = { path = "../gossip-sim", optional = true }
+gossiper-core = { version = "0.1.0", path = "../gossiper-core" }
+gossiper-transport = { version = "0.1.0", path = "../gossiper-transport", optional = true }
+gossiper-sim = { version = "0.1.0", path = "../gossiper-sim", optional = true }
 
 [[example]]
 name = "basic_gossip"

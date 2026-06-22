@@ -1,4 +1,4 @@
-use gossip_core::{
+use gossiper_core::{
     DeterministicRng, Effect, GossipConfig, GossipMessage, GossipNode, MessageId, NodeId, Round,
     Rumor,
 };

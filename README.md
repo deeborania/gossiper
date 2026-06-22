@@ -35,9 +35,9 @@ The lower-level crates exist to keep the design modular.
 ## Workspace Layout
 
 - `crates/gossiper`: user-facing facade crate
-- `crates/gossip-core`: transport-independent gossip protocol core
-- `crates/gossip-transport`: transport traits and in-memory transport helpers
-- `crates/gossip-sim`: deterministic simulation utilities
+- `crates/gossiper-core`: transport-independent gossip protocol core
+- `crates/gossiper-transport`: transport traits and in-memory transport helpers
+- `crates/gossiper-sim`: deterministic simulation utilities
 - `docs`: design notes and learning material
 - `index.html`: local HTML gossip protocol course
 
@@ -45,8 +45,8 @@ The lower-level crates exist to keep the design modular.
 
 ```rust
 use gossiper::{
-    apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageId, NodeId,
-    Round,
+    apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageIdGenerator,
+    NodeId, Round,
 };
 
 let config = GossipConfig::new(1, 10).expect("valid config");
@@ -59,7 +59,8 @@ let mut node_b = GossipNode::new(node_b_id.clone(), config);
 
 node_a.set_peers(vec![node_b_id.clone()]);
 
-let rumor_id = MessageId::new(1);
+let mut message_ids = MessageIdGenerator::default();
+let rumor_id = message_ids.next_id().expect("generator should have IDs");
 node_a.publish(rumor_id, Round::ZERO, "hello");
 
 let mut rng = DeterministicRng::new(1);
@@ -81,7 +82,7 @@ assert!(node_b.contains_rumor(rumor_id));
 
 ```bash
 cargo run -p gossiper --example basic_gossip
-cargo run -p gossip-sim --example convergence
+cargo run -p gossiper-sim --example convergence
 ```
 
 ## Run Tests

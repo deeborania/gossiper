@@ -6,6 +6,7 @@ use core::fmt;
 ///
 /// Rounds are controlled by the caller. The core protocol never sleeps and never
 /// reads the system clock.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Round(u64);
 
@@ -45,6 +46,7 @@ impl fmt::Display for Round {
 ///
 /// The protocol core treats this as an opaque monotonic value. It does not know
 /// whether the value came from a real clock, a simulator, or a test.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Timestamp(u64);
 

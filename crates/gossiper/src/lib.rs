@@ -8,19 +8,19 @@
 
 /// Core protocol state machines and data types.
 pub mod core {
-    pub use gossip_core::*;
+    pub use gossiper_core::*;
 }
 
 /// Transport traits and helpers.
 #[cfg(feature = "transport")]
 pub mod transport {
-    pub use gossip_transport::*;
+    pub use gossiper_transport::*;
 }
 
 /// Simulation utilities.
 #[cfg(feature = "sim")]
 pub mod sim {
-    pub use gossip_sim::*;
+    pub use gossiper_sim::*;
 }
 
 pub use crate::core::*;

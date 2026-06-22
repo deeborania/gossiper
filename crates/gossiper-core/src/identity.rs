@@ -7,6 +7,7 @@ use core::fmt;
 /// A `NodeId` identifies a protocol participant, not a network address.
 /// Addresses can change; protocol identity should remain stable for as long as
 /// the participant is considered the same logical node.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(String);
 
@@ -49,6 +50,7 @@ impl fmt::Display for NodeId {
 ///
 /// Message IDs are used for duplicate suppression. If a node sees the same
 /// `MessageId` again, it can avoid processing the same rumor repeatedly.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MessageId(u128);
 
@@ -82,6 +84,7 @@ impl fmt::Display for MessageId {
 /// need IDs to be stable across restarts, logs, storage, and multiple local
 /// producers. This helper is useful for tests, examples, and applications that
 /// only need deterministic in-process IDs.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessageIdGenerator {
     next: Option<u128>,
