@@ -2,8 +2,7 @@ use gossip_core::{GossipConfig, MessageId, NodeId, Round};
 use gossip_sim::Cluster;
 
 fn main() {
-    let mut cluster = Cluster::fully_connected(GossipConfig::new(2, 32).expect("valid config"), 5);
-
+    let mut cluster = Cluster::line(GossipConfig::new(1, 32).expect("valid config"), 5);
     let rumor_id = MessageId::new(1);
 
     cluster
@@ -11,23 +10,26 @@ fn main() {
             &NodeId::from("node-0"),
             rumor_id,
             Round::ZERO,
-            "cluster config changed",
+            "line topology rumor",
         )
         .expect("origin node should exist");
 
     println!(
-        "round 0 reach before tick: {}/{}",
+        "line topology reach before ticks: {}/{}",
         cluster.rumor_reach(rumor_id),
         cluster.node_count()
     );
 
-    for round in 0..5 {
+    for round in 0..8 {
         let report = cluster.tick(Round::new(round));
 
         println!(
-            "round {} sent {} messages, reach: {}/{}",
+            "round {}: attempted={}, sent={}, received={}, new_rumors={}, reach={}/{}",
             round,
+            report.attempted(),
             report.sent(),
+            report.received(),
+            report.new_rumors(),
             cluster.rumor_reach(rumor_id),
             cluster.node_count()
         );

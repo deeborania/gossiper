@@ -16,3 +16,13 @@ sim = ["transport", "dep:gossip-sim"]
 gossip-core = { path = "../gossip-core" }
 gossip-transport = { path = "../gossip-transport", optional = true }
 gossip-sim = { path = "../gossip-sim", optional = true }
+
+[[example]]
+name = "basic_gossip"
+path = "examples/basic_gossip.rs"
+required-features = ["transport"]
+
+[[example]]
+name = "sim_network"
+path = "examples/sim_network.rs"
+required-features = ["sim"]

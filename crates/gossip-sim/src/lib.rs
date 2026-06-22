@@ -180,6 +180,36 @@ fn valid_rate(rate: f64) -> bool {
     rate.is_finite() && (0.0..=1.0).contains(&rate)
 }
 
+fn mean_per_trial(total: usize, trials: usize) -> f64 {
+    if trials == 0 {
+        return 0.0;
+    }
+
+    total as f64 / trials as f64
+}
+
+fn ratio(numerator: usize, denominator: usize) -> f64 {
+    if denominator == 0 {
+        return 0.0;
+    }
+
+    numerator as f64 / denominator as f64
+}
+
+fn accepted_messages(attempted: usize, dropped: usize) -> usize {
+    attempted.saturating_sub(dropped)
+}
+
+fn message_copies(attempted: usize, dropped: usize, duplicated: usize) -> usize {
+    accepted_messages(attempted, dropped).saturating_add(duplicated)
+}
+
+fn generated_node_ids(node_count: usize) -> Vec<NodeId> {
+    (0..node_count)
+        .map(|index| NodeId::from(format!("node-{index}")))
+        .collect()
+}
+
 #[derive(Clone, Debug)]
 struct PendingSend<T> {
     source: NodeId,
@@ -243,9 +273,44 @@ impl<Event> TickReport<Event> {
         self.received
     }
 
+    /// Returns original send attempts that were not dropped by the simulated network.
+    pub fn accepted(&self) -> usize {
+        accepted_messages(self.attempted, self.dropped)
+    }
+
+    /// Returns message copies created after duplicate expansion.
+    pub fn message_copies(&self) -> usize {
+        message_copies(self.attempted, self.dropped, self.duplicated)
+    }
+
+    /// Returns the observed fraction of original send attempts that were dropped.
+    pub fn observed_drop_rate(&self) -> f64 {
+        ratio(self.dropped, self.attempted)
+    }
+
+    /// Returns the observed fraction of accepted original sends that were duplicated.
+    pub fn observed_duplicate_rate(&self) -> f64 {
+        ratio(self.duplicated, self.accepted())
+    }
+
+    /// Returns the observed fraction of message copies delayed for a future tick.
+    pub fn observed_delay_rate(&self) -> f64 {
+        ratio(self.delayed, self.message_copies())
+    }
+
+    /// Returns the observed fraction of sent messages delivered to receiving nodes.
+    pub fn observed_delivery_rate(&self) -> f64 {
+        ratio(self.received, self.sent)
+    }
+
     /// Returns the number of new-rumor events emitted during the tick.
     pub fn new_rumors(&self) -> usize {
         self.events.len()
+    }
+
+    /// Returns the observed fraction of received messages that produced new rumors.
+    pub fn new_rumor_rate(&self) -> f64 {
+        ratio(self.new_rumors(), self.received)
     }
 
     /// Returns events emitted during delivery, paired with the receiving node.
@@ -260,13 +325,145 @@ impl<Event> Default for TickReport<Event> {
     }
 }
 
+/// Summary of running a simulation for multiple rounds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunReport<Event> {
+    rounds_run: u64,
+    attempted: usize,
+    sent: usize,
+    dropped: usize,
+    duplicated: usize,
+    delayed: usize,
+    received: usize,
+    events: Vec<(NodeId, Event)>,
+}
+
+impl<Event> RunReport<Event> {
+    /// Creates an empty run report.
+    pub fn new() -> Self {
+        Self {
+            rounds_run: 0,
+            attempted: 0,
+            sent: 0,
+            dropped: 0,
+            duplicated: 0,
+            delayed: 0,
+            received: 0,
+            events: Vec::new(),
+        }
+    }
+
+    /// Returns how many rounds were run.
+    pub fn rounds_run(&self) -> u64 {
+        self.rounds_run
+    }
+
+    /// Returns the number of original send attempts during the run.
+    pub fn attempted(&self) -> usize {
+        self.attempted
+    }
+
+    /// Returns the number of messages handed to the simulated transport during the run.
+    pub fn sent(&self) -> usize {
+        self.sent
+    }
+
+    /// Returns the number of messages dropped by the simulated network during the run.
+    pub fn dropped(&self) -> usize {
+        self.dropped
+    }
+
+    /// Returns the number of extra duplicate messages created during the run.
+    pub fn duplicated(&self) -> usize {
+        self.duplicated
+    }
+
+    /// Returns the number of messages delayed for future delivery during the run.
+    pub fn delayed(&self) -> usize {
+        self.delayed
+    }
+
+    /// Returns the number of messages delivered to receiving nodes during the run.
+    pub fn received(&self) -> usize {
+        self.received
+    }
+
+    /// Returns original send attempts that were not dropped by the simulated network.
+    pub fn accepted(&self) -> usize {
+        accepted_messages(self.attempted, self.dropped)
+    }
+
+    /// Returns message copies created after duplicate expansion.
+    pub fn message_copies(&self) -> usize {
+        message_copies(self.attempted, self.dropped, self.duplicated)
+    }
+
+    /// Returns the observed fraction of original send attempts that were dropped.
+    pub fn observed_drop_rate(&self) -> f64 {
+        ratio(self.dropped, self.attempted)
+    }
+
+    /// Returns the observed fraction of accepted original sends that were duplicated.
+    pub fn observed_duplicate_rate(&self) -> f64 {
+        ratio(self.duplicated, self.accepted())
+    }
+
+    /// Returns the observed fraction of message copies delayed for a future tick.
+    pub fn observed_delay_rate(&self) -> f64 {
+        ratio(self.delayed, self.message_copies())
+    }
+
+    /// Returns the observed fraction of sent messages delivered to receiving nodes.
+    pub fn observed_delivery_rate(&self) -> f64 {
+        ratio(self.received, self.sent)
+    }
+
+    /// Returns the number of new-rumor events emitted during the run.
+    pub fn new_rumors(&self) -> usize {
+        self.events.len()
+    }
+
+    /// Returns the observed fraction of received messages that produced new rumors.
+    pub fn new_rumor_rate(&self) -> f64 {
+        ratio(self.new_rumors(), self.received)
+    }
+
+    /// Returns events emitted during the run, paired with the receiving node.
+    pub fn events(&self) -> &[(NodeId, Event)] {
+        &self.events
+    }
+
+    fn record_tick(&mut self, tick: TickReport<Event>) {
+        self.rounds_run += 1;
+        self.attempted += tick.attempted;
+        self.sent += tick.sent;
+        self.dropped += tick.dropped;
+        self.duplicated += tick.duplicated;
+        self.delayed += tick.delayed;
+        self.received += tick.received;
+        self.events.extend(tick.events);
+    }
+}
+
+impl<Event> Default for RunReport<Event> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Result of running a cluster until a rumor reaches a target number of nodes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReachReport {
     reached: bool,
     rounds_run: u64,
     reached_nodes: usize,
+    attempted: usize,
     sent: usize,
+    dropped: usize,
+    duplicated: usize,
+    delayed: usize,
+    received: usize,
+    new_rumors: usize,
 }
 
 impl ReachReport {
@@ -276,7 +473,32 @@ impl ReachReport {
             reached,
             rounds_run,
             reached_nodes,
+            attempted: 0,
             sent,
+            dropped: 0,
+            duplicated: 0,
+            delayed: 0,
+            received: 0,
+            new_rumors: 0,
+        }
+    }
+
+    fn from_run_report<Event>(
+        reached: bool,
+        reached_nodes: usize,
+        report: RunReport<Event>,
+    ) -> Self {
+        Self {
+            reached,
+            rounds_run: report.rounds_run(),
+            reached_nodes,
+            attempted: report.attempted(),
+            sent: report.sent(),
+            dropped: report.dropped(),
+            duplicated: report.duplicated(),
+            delayed: report.delayed(),
+            received: report.received(),
+            new_rumors: report.new_rumors(),
         }
     }
 
@@ -295,9 +517,74 @@ impl ReachReport {
         self.reached_nodes
     }
 
+    /// Returns the number of original send attempts while running.
+    pub fn attempted(&self) -> usize {
+        self.attempted
+    }
+
     /// Returns the total number of messages sent while running.
     pub fn sent(&self) -> usize {
         self.sent
+    }
+
+    /// Returns the number of messages dropped by the simulated network while running.
+    pub fn dropped(&self) -> usize {
+        self.dropped
+    }
+
+    /// Returns the number of extra duplicate messages created while running.
+    pub fn duplicated(&self) -> usize {
+        self.duplicated
+    }
+
+    /// Returns the number of messages delayed for future delivery while running.
+    pub fn delayed(&self) -> usize {
+        self.delayed
+    }
+
+    /// Returns the number of messages delivered to receiving nodes while running.
+    pub fn received(&self) -> usize {
+        self.received
+    }
+
+    /// Returns original send attempts that were not dropped by the simulated network.
+    pub fn accepted(&self) -> usize {
+        accepted_messages(self.attempted, self.dropped)
+    }
+
+    /// Returns message copies created after duplicate expansion.
+    pub fn message_copies(&self) -> usize {
+        message_copies(self.attempted, self.dropped, self.duplicated)
+    }
+
+    /// Returns the observed fraction of original send attempts that were dropped.
+    pub fn observed_drop_rate(&self) -> f64 {
+        ratio(self.dropped, self.attempted)
+    }
+
+    /// Returns the observed fraction of accepted original sends that were duplicated.
+    pub fn observed_duplicate_rate(&self) -> f64 {
+        ratio(self.duplicated, self.accepted())
+    }
+
+    /// Returns the observed fraction of message copies delayed for a future tick.
+    pub fn observed_delay_rate(&self) -> f64 {
+        ratio(self.delayed, self.message_copies())
+    }
+
+    /// Returns the observed fraction of sent messages delivered to receiving nodes.
+    pub fn observed_delivery_rate(&self) -> f64 {
+        ratio(self.received, self.sent)
+    }
+
+    /// Returns the number of new-rumor events emitted while running.
+    pub fn new_rumors(&self) -> usize {
+        self.new_rumors
+    }
+
+    /// Returns the observed fraction of received messages that produced new rumors.
+    pub fn new_rumor_rate(&self) -> f64 {
+        ratio(self.new_rumors, self.received)
     }
 
     /// Asserts that the target reach was achieved.
@@ -352,10 +639,11 @@ impl fmt::Display for ExperimentError {
 impl std::error::Error for ExperimentError {}
 
 /// Configuration for running repeated convergence trials.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConvergenceExperiment {
     node_count: usize,
     config: GossipConfig,
+    network: NetworkModel,
     max_rounds: u64,
     trials: usize,
     base_seed: u64,
@@ -386,6 +674,7 @@ impl ConvergenceExperiment {
         Ok(Self {
             node_count,
             config,
+            network: NetworkModel::new(),
             max_rounds,
             trials,
             base_seed: 1,
@@ -414,10 +703,27 @@ impl ConvergenceExperiment {
         self
     }
 
+    /// Returns the network model used for each trial.
+    pub fn network_model(&self) -> &NetworkModel {
+        &self.network
+    }
+
+    /// Returns a copy of this experiment with a different network model.
+    pub fn with_network_model(mut self, network: NetworkModel) -> Self {
+        self.network = network;
+        self
+    }
+
     /// Runs this convergence experiment.
     pub fn run(&self) -> ConvergenceReport {
         let mut successes = 0;
         let mut successful_rounds = Vec::new();
+        let mut attempted = 0;
+        let mut sent = 0;
+        let mut dropped = 0;
+        let mut duplicated = 0;
+        let mut delayed = 0;
+        let mut received = 0;
 
         for trial in 0..self.trials {
             let node_ids: Vec<_> = (0..self.node_count)
@@ -430,21 +736,52 @@ impl ConvergenceExperiment {
             let rumor = Rumor::new(rumor_id, origin.clone(), Round::ZERO, "experiment");
 
             let seed = self.base_seed.saturating_add(trial as u64);
-            let mut cluster = Cluster::with_seed(config, node_ids, seed);
+            let mut cluster =
+                Cluster::with_seed(config, node_ids, seed).with_network_model(self.network.clone());
 
             cluster
                 .insert_rumor(&origin, rumor)
                 .expect("origin node should exist");
 
-            let report = cluster.run_until_reached(rumor_id, self.node_count, self.max_rounds);
+            let initial_reach = cluster.rumor_reach(rumor_id);
+            let mut reached = initial_reach >= self.node_count;
+            let mut rounds_run = 0;
 
-            if report.reached() {
+            for round in 0..self.max_rounds {
+                if reached {
+                    break;
+                }
+
+                let tick_report = cluster.tick(Round::new(round));
+
+                attempted += tick_report.attempted();
+                sent += tick_report.sent();
+                dropped += tick_report.dropped();
+                duplicated += tick_report.duplicated();
+                delayed += tick_report.delayed();
+                received += tick_report.received();
+
+                rounds_run = round + 1;
+                reached = cluster.rumor_reach(rumor_id) >= self.node_count;
+            }
+
+            if reached {
                 successes += 1;
-                successful_rounds.push(report.rounds_run());
+                successful_rounds.push(rounds_run);
             }
         }
 
-        ConvergenceReport::new(self.trials, successes, successful_rounds)
+        ConvergenceReport::new(
+            self.trials,
+            successes,
+            successful_rounds,
+            attempted,
+            sent,
+            dropped,
+            duplicated,
+            delayed,
+            received,
+        )
     }
 }
 
@@ -454,15 +791,37 @@ pub struct ConvergenceReport {
     trials: usize,
     successes: usize,
     successful_rounds: Vec<u64>,
+    attempted: usize,
+    sent: usize,
+    dropped: usize,
+    duplicated: usize,
+    delayed: usize,
+    received: usize,
 }
 
 impl ConvergenceReport {
     /// Creates a convergence report.
-    pub fn new(trials: usize, successes: usize, successful_rounds: Vec<u64>) -> Self {
+    pub fn new(
+        trials: usize,
+        successes: usize,
+        successful_rounds: Vec<u64>,
+        attempted: usize,
+        sent: usize,
+        dropped: usize,
+        duplicated: usize,
+        delayed: usize,
+        received: usize,
+    ) -> Self {
         Self {
             trials,
             successes,
             successful_rounds,
+            attempted,
+            sent,
+            dropped,
+            duplicated,
+            delayed,
+            received,
         }
     }
 
@@ -476,6 +835,11 @@ impl ConvergenceReport {
         self.successes
     }
 
+    /// Returns the number of failed trials.
+    pub fn failures(&self) -> usize {
+        self.trials.saturating_sub(self.successes)
+    }
+
     /// Returns the fraction of trials that succeeded.
     pub fn success_rate(&self) -> f64 {
         if self.trials == 0 {
@@ -485,9 +849,104 @@ impl ConvergenceReport {
         self.successes as f64 / self.trials as f64
     }
 
+    /// Returns the fraction of trials that did not converge.
+    pub fn failure_rate(&self) -> f64 {
+        ratio(self.failures(), self.trials)
+    }
+
     /// Returns the successful round counts.
     pub fn successful_rounds(&self) -> &[u64] {
         &self.successful_rounds
+    }
+
+    /// Returns the number of original send attempts across all trials.
+    pub fn attempted(&self) -> usize {
+        self.attempted
+    }
+
+    /// Returns the number of messages handed to simulated transports across all trials.
+    pub fn sent(&self) -> usize {
+        self.sent
+    }
+
+    /// Returns the number of messages dropped by simulated networks across all trials.
+    pub fn dropped(&self) -> usize {
+        self.dropped
+    }
+
+    /// Returns the number of extra duplicate messages created across all trials.
+    pub fn duplicated(&self) -> usize {
+        self.duplicated
+    }
+
+    /// Returns the number of messages delayed for future delivery across all trials.
+    pub fn delayed(&self) -> usize {
+        self.delayed
+    }
+
+    /// Returns the number of messages delivered to receiving nodes across all trials.
+    pub fn received(&self) -> usize {
+        self.received
+    }
+
+    /// Returns original send attempts that were not dropped by the simulated network.
+    pub fn accepted(&self) -> usize {
+        accepted_messages(self.attempted, self.dropped)
+    }
+
+    /// Returns message copies created after duplicate expansion.
+    pub fn message_copies(&self) -> usize {
+        message_copies(self.attempted, self.dropped, self.duplicated)
+    }
+
+    /// Returns the observed fraction of original send attempts that were dropped.
+    pub fn observed_drop_rate(&self) -> f64 {
+        ratio(self.dropped, self.attempted)
+    }
+
+    /// Returns the observed fraction of accepted original sends that were duplicated.
+    pub fn observed_duplicate_rate(&self) -> f64 {
+        ratio(self.duplicated, self.accepted())
+    }
+
+    /// Returns the observed fraction of message copies delayed for a future tick.
+    pub fn observed_delay_rate(&self) -> f64 {
+        ratio(self.delayed, self.message_copies())
+    }
+
+    /// Returns the observed fraction of sent messages delivered to receiving nodes.
+    pub fn observed_delivery_rate(&self) -> f64 {
+        ratio(self.received, self.sent)
+    }
+
+    /// Returns the mean original send attempts per trial.
+    pub fn mean_attempted_per_trial(&self) -> f64 {
+        mean_per_trial(self.attempted, self.trials)
+    }
+
+    /// Returns the mean sent messages per trial.
+    pub fn mean_sent_per_trial(&self) -> f64 {
+        mean_per_trial(self.sent, self.trials)
+    }
+
+    /// Returns the mean dropped messages per trial.
+    pub fn mean_dropped_per_trial(&self) -> f64 {
+        mean_per_trial(self.dropped, self.trials)
+    }
+
+    /// Returns the mean duplicate messages per trial.
+    pub fn mean_duplicated_per_trial(&self) -> f64 {
+        mean_per_trial(self.duplicated, self.trials)
+    }
+
+    /// Returns the mean delayed messages per trial.
+    pub fn mean_delayed_per_trial(&self) -> f64 {
+        mean_per_trial(self.delayed, self.trials)
+    }
+
+    /// Returns the mean received messages per trial.
+    pub fn mean_received_per_trial(&self) -> f64 {
+        mean_per_trial(self.received, self.trials)
     }
 
     /// Returns the mean number of rounds among successful trials.
@@ -521,6 +980,287 @@ impl ConvergenceReport {
         let index = rank.saturating_sub(1);
 
         rounds.get(index).copied()
+    }
+}
+
+/// A named convergence experiment.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConvergenceScenario {
+    label: String,
+    experiment: ConvergenceExperiment,
+}
+
+impl ConvergenceScenario {
+    /// Creates a named convergence scenario.
+    pub fn new(label: impl Into<String>, experiment: ConvergenceExperiment) -> Self {
+        Self {
+            label: label.into(),
+            experiment,
+        }
+    }
+
+    /// Returns the scenario label.
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Returns the convergence experiment for this scenario.
+    pub fn experiment(&self) -> &ConvergenceExperiment {
+        &self.experiment
+    }
+
+    fn run(self) -> ConvergenceScenarioReport {
+        ConvergenceScenarioReport::new(self.label, self.experiment.run())
+    }
+}
+
+/// Runs named convergence experiments and keeps their reports together.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ConvergenceComparison {
+    scenarios: Vec<ConvergenceScenario>,
+}
+
+impl ConvergenceComparison {
+    /// Creates an empty convergence comparison.
+    pub fn new() -> Self {
+        Self {
+            scenarios: Vec::new(),
+        }
+    }
+
+    /// Adds a named experiment to this comparison.
+    pub fn add(mut self, label: impl Into<String>, experiment: ConvergenceExperiment) -> Self {
+        self.scenarios
+            .push(ConvergenceScenario::new(label, experiment));
+        self
+    }
+
+    /// Adds an already-created scenario to this comparison.
+    pub fn add_scenario(mut self, scenario: ConvergenceScenario) -> Self {
+        self.scenarios.push(scenario);
+        self
+    }
+
+    /// Returns named scenarios that will be run.
+    pub fn scenarios(&self) -> &[ConvergenceScenario] {
+        &self.scenarios
+    }
+
+    /// Returns the number of scenarios in this comparison.
+    pub fn len(&self) -> usize {
+        self.scenarios.len()
+    }
+
+    /// Returns `true` if this comparison contains no scenarios.
+    pub fn is_empty(&self) -> bool {
+        self.scenarios.is_empty()
+    }
+
+    /// Runs every scenario and returns their reports.
+    pub fn run(self) -> ConvergenceComparisonReport {
+        let results = self
+            .scenarios
+            .into_iter()
+            .map(ConvergenceScenario::run)
+            .collect();
+
+        ConvergenceComparisonReport::new(results)
+    }
+}
+
+/// Aggregate result of running a convergence comparison.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConvergenceComparisonReport {
+    results: Vec<ConvergenceScenarioReport>,
+}
+
+impl ConvergenceComparisonReport {
+    /// Creates a convergence comparison report from scenario reports.
+    pub fn new(results: Vec<ConvergenceScenarioReport>) -> Self {
+        Self { results }
+    }
+
+    /// Returns reports for every scenario in insertion order.
+    pub fn results(&self) -> &[ConvergenceScenarioReport] {
+        &self.results
+    }
+
+    /// Returns the number of scenario reports.
+    pub fn len(&self) -> usize {
+        self.results.len()
+    }
+
+    /// Returns `true` if this report contains no scenario reports.
+    pub fn is_empty(&self) -> bool {
+        self.results.is_empty()
+    }
+}
+
+/// Result of running one named convergence scenario.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConvergenceScenarioReport {
+    label: String,
+    report: ConvergenceReport,
+}
+
+impl ConvergenceScenarioReport {
+    /// Creates a named convergence scenario report.
+    pub fn new(label: impl Into<String>, report: ConvergenceReport) -> Self {
+        Self {
+            label: label.into(),
+            report,
+        }
+    }
+
+    /// Returns the scenario label.
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Returns the convergence report for this scenario.
+    pub fn report(&self) -> &ConvergenceReport {
+        &self.report
+    }
+}
+
+/// Builder for deterministic simulation clusters.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClusterBuilder {
+    config: GossipConfig,
+    node_ids: Vec<NodeId>,
+    seed: u64,
+    network: NetworkModel,
+}
+
+impl ClusterBuilder {
+    /// Creates a cluster builder with no nodes, seed `1`, and a reliable network.
+    pub fn new(config: GossipConfig) -> Self {
+        Self {
+            config,
+            node_ids: Vec::new(),
+            seed: 1,
+            network: NetworkModel::new(),
+        }
+    }
+
+    /// Returns the gossip configuration used for built clusters.
+    pub fn config(&self) -> &GossipConfig {
+        &self.config
+    }
+
+    /// Returns node IDs that will be used for built clusters.
+    pub fn node_ids(&self) -> &[NodeId] {
+        &self.node_ids
+    }
+
+    /// Returns the seed used for deterministic node and network randomness.
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    /// Returns the simulated network model used for built clusters.
+    pub fn network_model(&self) -> &NetworkModel {
+        &self.network
+    }
+
+    /// Returns this builder with generated node IDs.
+    ///
+    /// Generated IDs are `node-0`, `node-1`, `node-2`, and so on.
+    pub fn with_node_count(mut self, node_count: usize) -> Self {
+        self.node_ids = generated_node_ids(node_count);
+        self
+    }
+
+    /// Returns this builder with explicit node IDs.
+    pub fn with_node_ids(mut self, node_ids: Vec<NodeId>) -> Self {
+        self.node_ids = node_ids;
+        self
+    }
+
+    /// Returns this builder with a different deterministic seed.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Returns this builder with a different network model.
+    pub fn with_network_model(mut self, network: NetworkModel) -> Self {
+        self.network = network;
+        self
+    }
+
+    /// Returns this builder with a simulated packet loss rate.
+    pub fn with_loss_rate(mut self, loss_rate: f64) -> Result<Self, ClusterError> {
+        self.network = self.network.with_loss_rate(loss_rate)?;
+        Ok(self)
+    }
+
+    /// Returns this builder with a simulated duplicate delivery rate.
+    pub fn with_duplicate_rate(mut self, duplicate_rate: f64) -> Result<Self, ClusterError> {
+        self.network = self.network.with_duplicate_rate(duplicate_rate)?;
+        Ok(self)
+    }
+
+    /// Returns this builder with a simulated delayed delivery rate.
+    pub fn with_delay_rate(
+        mut self,
+        delay_rate: f64,
+        max_delay_rounds: u64,
+    ) -> Result<Self, ClusterError> {
+        self.network = self.network.with_delay_rate(delay_rate, max_delay_rounds)?;
+        Ok(self)
+    }
+
+    /// Returns this builder with an added network partition.
+    pub fn with_partition(mut self, partition: NetworkPartition) -> Self {
+        self.network = self.network.with_partition(partition);
+        self
+    }
+
+    /// Returns this builder with all network partitions removed.
+    pub fn without_partitions(mut self) -> Self {
+        self.network = self.network.without_partitions();
+        self
+    }
+
+    /// Builds a cluster where every node peers with every other node.
+    pub fn fully_connected<T>(self) -> Cluster<T> {
+        let Self {
+            config,
+            node_ids,
+            seed,
+            network,
+        } = self;
+
+        Cluster::with_seed(config, node_ids, seed).with_network_model(network)
+    }
+
+    /// Builds a line topology cluster.
+    ///
+    /// Each node peers with its immediate neighbor or neighbors in the builder's
+    /// node-ID order.
+    pub fn line<T>(self) -> Cluster<T> {
+        let node_ids = self.node_ids.clone();
+        let mut cluster = self.fully_connected();
+
+        for index in 0..node_ids.len() {
+            let node_id = &node_ids[index];
+            let mut peers = Vec::new();
+
+            if index > 0 {
+                peers.push(node_ids[index - 1].clone());
+            }
+
+            if index + 1 < node_ids.len() {
+                peers.push(node_ids[index + 1].clone());
+            }
+
+            if let Some(node) = cluster.node_mut(node_id) {
+                node.set_peers(peers);
+            }
+        }
+
+        cluster
     }
 }
 
@@ -573,6 +1313,38 @@ impl<T> Cluster<T> {
     /// Creates a cluster where each node knows every other node as a peer.
     pub fn new(config: GossipConfig, node_ids: Vec<NodeId>) -> Self {
         Self::with_seed(config, node_ids, 1)
+    }
+
+    /// Creates a fully connected cluster with generated node IDs.
+    pub fn fully_connected(config: GossipConfig, node_count: usize) -> Self {
+        ClusterBuilder::new(config)
+            .with_node_count(node_count)
+            .fully_connected()
+    }
+
+    /// Creates a fully connected cluster with generated node IDs and a deterministic seed.
+    pub fn fully_connected_with_seed(config: GossipConfig, node_count: usize, seed: u64) -> Self {
+        ClusterBuilder::new(config)
+            .with_node_count(node_count)
+            .with_seed(seed)
+            .fully_connected()
+    }
+
+    /// Creates a line topology cluster with generated node IDs.
+    ///
+    /// Each node peers with its immediate neighbor or neighbors:
+    ///
+    /// `node-0 <-> node-1 <-> node-2 <-> ...`
+    pub fn line(config: GossipConfig, node_count: usize) -> Self {
+        Self::line_with_seed(config, node_count, 1)
+    }
+
+    /// Creates a line topology cluster with generated node IDs and a deterministic seed.
+    pub fn line_with_seed(config: GossipConfig, node_count: usize, seed: u64) -> Self {
+        ClusterBuilder::new(config)
+            .with_node_count(node_count)
+            .with_seed(seed)
+            .line()
     }
 
     /// Creates a cluster with deterministic per-node RNG seeds derived from `seed`.
@@ -671,6 +1443,18 @@ impl<T> Cluster<T> {
     /// Returns active network partitions.
     pub fn partitions(&self) -> &[NetworkPartition] {
         self.network.partitions()
+    }
+
+    /// Returns how many messages are currently queued for delayed delivery.
+    pub fn pending_delayed_count(&self) -> usize {
+        self.delayed_messages.values().map(Vec::len).sum()
+    }
+
+    /// Returns delayed-delivery queue sizes by due round.
+    pub fn pending_delayed_rounds(&self) -> impl Iterator<Item = (Round, usize)> + '_ {
+        self.delayed_messages
+            .iter()
+            .map(|(round, messages)| (Round::new(*round), messages.len()))
     }
 
     /// Returns a copy of this cluster with an added network partition.
@@ -942,6 +1726,18 @@ impl<T: Clone> Cluster<T> {
         !self.nodes.is_empty() && self.rumor_reach(rumor_id) == self.node_count()
     }
 
+    /// Runs a fixed number of simulation rounds.
+    pub fn run_for_rounds(&mut self, start_round: Round, rounds: u64) -> RunReport<GossipEvent<T>> {
+        let mut report = RunReport::new();
+
+        for offset in 0..rounds {
+            let round = Round::new(start_round.get().saturating_add(offset));
+            report.record_tick(self.tick(round));
+        }
+
+        report
+    }
+
     /// Runs rounds until a rumor reaches at least `target_reach` nodes or the budget is exhausted.
     pub fn run_until_reached(
         &mut self,
@@ -955,28 +1751,58 @@ impl<T: Clone> Cluster<T> {
             return ReachReport::new(true, 0, initial_reach, 0);
         }
 
-        let mut sent = 0;
+        let mut run_report = RunReport::new();
 
         for round in 0..max_rounds {
             let tick_report = self.tick(Round::new(round));
-            sent += tick_report.sent();
+            run_report.record_tick(tick_report);
 
             let reached_nodes = self.rumor_reach(rumor_id);
 
             if reached_nodes >= target_reach {
-                return ReachReport::new(true, round + 1, reached_nodes, sent);
+                return ReachReport::from_run_report(true, reached_nodes, run_report);
             }
         }
 
-        ReachReport::new(false, max_rounds, self.rumor_reach(rumor_id), sent)
+        ReachReport::from_run_report(false, self.rumor_reach(rumor_id), run_report)
+    }
+
+    /// Asserts that every node learns a rumor within `max_rounds`.
+    ///
+    /// Returns the successful reach report so callers can inspect how many rounds
+    /// and messages were needed.
+    pub fn assert_reaches_all_within(
+        &mut self,
+        rumor_id: MessageId,
+        max_rounds: u64,
+    ) -> ReachReport {
+        let report = self.run_until_reached(rumor_id, self.node_count(), max_rounds);
+        report.assert_reached_within(max_rounds);
+        report
+    }
+
+    /// Asserts that at least `target_reach` nodes learn a rumor within `max_rounds`.
+    ///
+    /// Returns the successful reach report so callers can inspect how many rounds
+    /// and messages were needed.
+    pub fn assert_reaches_at_least_within(
+        &mut self,
+        rumor_id: MessageId,
+        target_reach: usize,
+        max_rounds: u64,
+    ) -> ReachReport {
+        let report = self.run_until_reached(rumor_id, target_reach, max_rounds);
+        report.assert_reached_within(max_rounds);
+        report
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        Cluster, ClusterError, ConvergenceExperiment, ConvergenceReport, ExperimentError,
-        NetworkModel, NetworkPartition, ReachReport,
+        Cluster, ClusterBuilder, ClusterError, ConvergenceComparison, ConvergenceExperiment,
+        ConvergenceReport, ConvergenceScenario, ExperimentError, NetworkModel, NetworkPartition,
+        ReachReport, RunReport,
     };
     use gossip_core::{GossipConfig, InsertOutcome, MessageId, NodeId, Round};
 
@@ -1021,6 +1847,143 @@ mod tests {
                 NodeId::from("node-b"),
                 NodeId::from("node-c"),
             ]
+        );
+    }
+
+    #[test]
+    fn fully_connected_generates_node_ids() {
+        let cluster: Cluster<&str> =
+            Cluster::fully_connected(GossipConfig::new(1, 10).expect("valid config"), 3);
+
+        let node_ids: Vec<_> = cluster.node_ids().cloned().collect();
+
+        assert_eq!(
+            node_ids,
+            vec![
+                NodeId::from("node-0"),
+                NodeId::from("node-1"),
+                NodeId::from("node-2"),
+            ]
+        );
+
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("node-0"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("node-1"), NodeId::from("node-2")]
+        );
+    }
+
+    #[test]
+    fn line_generates_neighbor_peers() {
+        let cluster: Cluster<&str> =
+            Cluster::line(GossipConfig::new(1, 10).expect("valid config"), 4);
+
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("node-0"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("node-1")]
+        );
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("node-1"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("node-0"), NodeId::from("node-2")]
+        );
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("node-3"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("node-2")]
+        );
+    }
+
+    #[test]
+    fn cluster_builder_builds_fully_connected_cluster() {
+        let network = NetworkModel::new()
+            .with_loss_rate(0.25)
+            .expect("valid loss rate");
+
+        let cluster: Cluster<&str> =
+            ClusterBuilder::new(GossipConfig::new(1, 10).expect("valid config"))
+                .with_node_count(3)
+                .with_seed(42)
+                .with_network_model(network)
+                .fully_connected();
+
+        assert_eq!(cluster.node_count(), 3);
+        assert_eq!(cluster.loss_rate(), 0.25);
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("node-0"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("node-1"), NodeId::from("node-2")]
+        );
+    }
+
+    #[test]
+    fn cluster_builder_builds_line_with_custom_node_ids() {
+        let cluster: Cluster<&str> =
+            ClusterBuilder::new(GossipConfig::new(1, 10).expect("valid config"))
+                .with_node_ids(vec![
+                    NodeId::from("alpha"),
+                    NodeId::from("beta"),
+                    NodeId::from("gamma"),
+                ])
+                .line();
+
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("alpha"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("beta")]
+        );
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("beta"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("alpha"), NodeId::from("gamma")]
+        );
+        assert_eq!(
+            cluster
+                .node(&NodeId::from("gamma"))
+                .expect("node should exist")
+                .peers(),
+            &[NodeId::from("beta")]
+        );
+    }
+
+    #[test]
+    fn cluster_builder_network_helpers_validate_rates() {
+        let builder = ClusterBuilder::new(GossipConfig::new(1, 10).expect("valid config"));
+
+        assert_eq!(
+            builder
+                .clone()
+                .with_loss_rate(1.1)
+                .expect_err("invalid loss rate should fail"),
+            ClusterError::InvalidLossRate(1.1)
+        );
+        assert_eq!(
+            builder
+                .clone()
+                .with_duplicate_rate(-0.1)
+                .expect_err("invalid duplicate rate should fail"),
+            ClusterError::InvalidDuplicateRate(-0.1)
+        );
+        assert_eq!(
+            builder
+                .with_delay_rate(f64::INFINITY, 1)
+                .expect_err("invalid delay rate should fail"),
+            ClusterError::InvalidDelayRate(f64::INFINITY)
         );
     }
 
@@ -1288,6 +2251,13 @@ mod tests {
         assert_eq!(report.attempted(), 2);
         assert_eq!(report.sent(), 0);
         assert_eq!(report.dropped(), 2);
+        assert_eq!(report.accepted(), 0);
+        assert_eq!(report.message_copies(), 0);
+        assert_eq!(report.observed_drop_rate(), 1.0);
+        assert_eq!(report.observed_duplicate_rate(), 0.0);
+        assert_eq!(report.observed_delay_rate(), 0.0);
+        assert_eq!(report.observed_delivery_rate(), 0.0);
+        assert_eq!(report.new_rumor_rate(), 0.0);
         assert_eq!(cluster.rumor_reach(MessageId::new(1)), 1);
     }
 
@@ -1361,6 +2331,13 @@ mod tests {
         assert_eq!(report.duplicated(), 1);
         assert_eq!(report.received(), 2);
         assert_eq!(report.new_rumors(), 1);
+        assert_eq!(report.accepted(), 1);
+        assert_eq!(report.message_copies(), 2);
+        assert_eq!(report.observed_drop_rate(), 0.0);
+        assert_eq!(report.observed_duplicate_rate(), 1.0);
+        assert_eq!(report.observed_delay_rate(), 0.0);
+        assert_eq!(report.observed_delivery_rate(), 1.0);
+        assert_eq!(report.new_rumor_rate(), 0.5);
         assert_eq!(cluster.rumor_reach(MessageId::new(1)), 2);
         assert_eq!(report.events().len(), 1);
     }
@@ -1415,6 +2392,14 @@ mod tests {
         assert_eq!(first.sent(), 0);
         assert_eq!(first.delayed(), 1);
         assert_eq!(first.received(), 0);
+        assert_eq!(first.accepted(), 1);
+        assert_eq!(first.message_copies(), 1);
+        assert_eq!(first.observed_delay_rate(), 1.0);
+        assert_eq!(cluster.pending_delayed_count(), 1);
+        assert_eq!(
+            cluster.pending_delayed_rounds().collect::<Vec<_>>(),
+            vec![(Round::new(1), 1)]
+        );
         assert_eq!(cluster.rumor_reach(MessageId::new(1)), 1);
 
         let second = cluster.tick(Round::new(1));
@@ -1422,6 +2407,13 @@ mod tests {
         assert_eq!(second.sent(), 1);
         assert_eq!(second.received(), 1);
         assert_eq!(second.new_rumors(), 1);
+        assert_eq!(second.observed_delivery_rate(), 1.0);
+        assert_eq!(second.new_rumor_rate(), 1.0);
+        assert_eq!(cluster.pending_delayed_count(), 1);
+        assert_eq!(
+            cluster.pending_delayed_rounds().collect::<Vec<_>>(),
+            vec![(Round::new(2), 1)]
+        );
         assert_eq!(cluster.rumor_reach(MessageId::new(1)), 2);
     }
 
@@ -1469,7 +2461,13 @@ mod tests {
         assert!(report.reached());
         assert_eq!(report.rounds_run(), 2);
         assert_eq!(report.reached_nodes(), 3);
+        assert_eq!(report.attempted(), 0);
         assert_eq!(report.sent(), 7);
+        assert_eq!(report.dropped(), 0);
+        assert_eq!(report.duplicated(), 0);
+        assert_eq!(report.delayed(), 0);
+        assert_eq!(report.received(), 0);
+        assert_eq!(report.new_rumors(), 0);
     }
 
     #[test]
@@ -1478,6 +2476,52 @@ mod tests {
 
         report.assert_reached();
         report.assert_reached_within(2);
+    }
+
+    #[test]
+    fn run_report_starts_empty() {
+        let report: RunReport<&str> = RunReport::new();
+
+        assert_eq!(report.rounds_run(), 0);
+        assert_eq!(report.attempted(), 0);
+        assert_eq!(report.sent(), 0);
+        assert_eq!(report.dropped(), 0);
+        assert_eq!(report.duplicated(), 0);
+        assert_eq!(report.delayed(), 0);
+        assert_eq!(report.received(), 0);
+        assert_eq!(report.accepted(), 0);
+        assert_eq!(report.message_copies(), 0);
+        assert_eq!(report.observed_drop_rate(), 0.0);
+        assert_eq!(report.observed_duplicate_rate(), 0.0);
+        assert_eq!(report.observed_delay_rate(), 0.0);
+        assert_eq!(report.observed_delivery_rate(), 0.0);
+        assert_eq!(report.new_rumors(), 0);
+        assert_eq!(report.new_rumor_rate(), 0.0);
+        assert!(report.events().is_empty());
+    }
+
+    #[test]
+    fn cluster_can_run_for_fixed_round_count() {
+        let mut cluster = Cluster::new(
+            GossipConfig::new(1, 10).expect("valid config"),
+            vec![NodeId::from("node-a"), NodeId::from("node-b")],
+        );
+
+        cluster
+            .publish(
+                &NodeId::from("node-a"),
+                MessageId::new(1),
+                Round::ZERO,
+                "hello",
+            )
+            .expect("node should exist");
+
+        let report = cluster.run_for_rounds(Round::ZERO, 2);
+
+        assert_eq!(report.rounds_run(), 2);
+        assert!(report.attempted() >= 1);
+        assert!(report.sent() >= 1);
+        assert_eq!(cluster.rumor_reach(MessageId::new(1)), 2);
     }
 
     #[test]
@@ -1505,7 +2549,11 @@ mod tests {
         assert!(report.reached());
         assert!(report.rounds_run() <= 5);
         assert_eq!(report.reached_nodes(), 3);
+        assert!(report.attempted() > 0);
         assert!(report.sent() > 0);
+        assert!(report.received() > 0);
+        assert!(report.new_rumors() > 0);
+        assert_eq!(report.observed_delivery_rate(), 1.0);
     }
 
     #[test]
@@ -1530,6 +2578,7 @@ mod tests {
         assert_eq!(report.rounds_run(), 3);
         assert_eq!(report.reached_nodes(), 1);
         assert_eq!(report.sent(), 0);
+        assert_eq!(report.received(), 0);
     }
 
     #[test]
@@ -1557,27 +2606,110 @@ mod tests {
     }
 
     #[test]
+    fn cluster_asserts_all_nodes_reached_within_budget() {
+        let mut cluster = Cluster::new(
+            GossipConfig::new(2, 10).expect("valid config"),
+            vec![
+                NodeId::from("node-a"),
+                NodeId::from("node-b"),
+                NodeId::from("node-c"),
+            ],
+        );
+
+        cluster
+            .publish(
+                &NodeId::from("node-a"),
+                MessageId::new(1),
+                Round::ZERO,
+                "hello",
+            )
+            .expect("node should exist");
+
+        let report = cluster.assert_reaches_all_within(MessageId::new(1), 5);
+
+        assert!(report.reached());
+        assert_eq!(report.reached_nodes(), 3);
+    }
+
+    #[test]
+    fn cluster_asserts_target_reach_within_budget() {
+        let mut cluster = Cluster::new(
+            GossipConfig::new(1, 10).expect("valid config"),
+            vec![
+                NodeId::from("node-a"),
+                NodeId::from("node-b"),
+                NodeId::from("node-c"),
+            ],
+        );
+
+        cluster
+            .publish(
+                &NodeId::from("node-a"),
+                MessageId::new(1),
+                Round::ZERO,
+                "hello",
+            )
+            .expect("node should exist");
+
+        let report = cluster.assert_reaches_at_least_within(MessageId::new(1), 2, 5);
+
+        assert!(report.reached());
+        assert!(report.reached_nodes() >= 2);
+    }
+
+    #[test]
     fn convergence_report_calculates_success_rate() {
-        let report = ConvergenceReport::new(4, 3, vec![2, 3, 4]);
+        let report = ConvergenceReport::new(4, 3, vec![2, 3, 4], 10, 9, 1, 2, 3, 8);
 
         assert_eq!(report.trials(), 4);
         assert_eq!(report.successes(), 3);
+        assert_eq!(report.failures(), 1);
         assert_eq!(report.success_rate(), 0.75);
+        assert_eq!(report.failure_rate(), 0.25);
         assert_eq!(report.successful_rounds(), &[2, 3, 4]);
         assert_eq!(report.mean_successful_rounds(), Some(3.0));
+        assert_eq!(report.attempted(), 10);
+        assert_eq!(report.sent(), 9);
+        assert_eq!(report.dropped(), 1);
+        assert_eq!(report.duplicated(), 2);
+        assert_eq!(report.delayed(), 3);
+        assert_eq!(report.received(), 8);
+        assert_eq!(report.accepted(), 9);
+        assert_eq!(report.message_copies(), 11);
+        assert_eq!(report.observed_drop_rate(), 0.1);
+        assert_eq!(report.observed_duplicate_rate(), 2.0 / 9.0);
+        assert_eq!(report.observed_delay_rate(), 3.0 / 11.0);
+        assert_eq!(report.observed_delivery_rate(), 8.0 / 9.0);
+        assert_eq!(report.mean_attempted_per_trial(), 2.5);
+        assert_eq!(report.mean_sent_per_trial(), 2.25);
+        assert_eq!(report.mean_dropped_per_trial(), 0.25);
+        assert_eq!(report.mean_duplicated_per_trial(), 0.5);
+        assert_eq!(report.mean_delayed_per_trial(), 0.75);
+        assert_eq!(report.mean_received_per_trial(), 2.0);
     }
 
     #[test]
     fn convergence_report_handles_zero_trials_and_no_successes() {
-        let report = ConvergenceReport::new(0, 0, Vec::new());
+        let report = ConvergenceReport::new(0, 0, Vec::new(), 0, 0, 0, 0, 0, 0);
 
         assert_eq!(report.success_rate(), 0.0);
+        assert_eq!(report.failure_rate(), 0.0);
         assert_eq!(report.mean_successful_rounds(), None);
+        assert_eq!(report.observed_drop_rate(), 0.0);
+        assert_eq!(report.observed_duplicate_rate(), 0.0);
+        assert_eq!(report.observed_delay_rate(), 0.0);
+        assert_eq!(report.observed_delivery_rate(), 0.0);
+        assert_eq!(report.mean_attempted_per_trial(), 0.0);
+        assert_eq!(report.mean_sent_per_trial(), 0.0);
+        assert_eq!(report.mean_dropped_per_trial(), 0.0);
+        assert_eq!(report.mean_duplicated_per_trial(), 0.0);
+        assert_eq!(report.mean_delayed_per_trial(), 0.0);
+        assert_eq!(report.mean_received_per_trial(), 0.0);
     }
 
     #[test]
     fn convergence_report_calculates_percentiles() {
-        let report = ConvergenceReport::new(5, 5, vec![10, 2, 4, 3, 2]);
+        let report = ConvergenceReport::new(5, 5, vec![10, 2, 4, 3, 2], 0, 0, 0, 0, 0, 0);
 
         assert_eq!(report.percentile_successful_rounds(0.0), Some(2));
         assert_eq!(report.percentile_successful_rounds(50.0), Some(3));
@@ -1587,11 +2719,11 @@ mod tests {
 
     #[test]
     fn convergence_report_percentile_returns_none_for_invalid_input() {
-        let report = ConvergenceReport::new(0, 0, Vec::new());
+        let report = ConvergenceReport::new(0, 0, Vec::new(), 0, 0, 0, 0, 0, 0);
 
         assert_eq!(report.percentile_successful_rounds(50.0), None);
 
-        let report = ConvergenceReport::new(3, 3, vec![1, 2, 3]);
+        let report = ConvergenceReport::new(3, 3, vec![1, 2, 3], 0, 0, 0, 0, 0, 0);
 
         assert_eq!(report.percentile_successful_rounds(-1.0), None);
         assert_eq!(report.percentile_successful_rounds(101.0), None);
@@ -1649,6 +2781,117 @@ mod tests {
             .with_seed(42);
 
         assert_eq!(experiment.base_seed(), 42);
+    }
+
+    #[test]
+    fn convergence_experiment_uses_reliable_network_by_default() {
+        let experiment = ConvergenceExperiment::new(5, 2, 5, 4).expect("valid experiment");
+
+        assert_eq!(experiment.network_model().loss_rate(), 0.0);
+        assert_eq!(experiment.network_model().duplicate_rate(), 0.0);
+        assert_eq!(experiment.network_model().delay_rate(), 0.0);
+        assert!(experiment.network_model().partitions().is_empty());
+    }
+
+    #[test]
+    fn convergence_experiment_can_override_network_model() {
+        let network = NetworkModel::new()
+            .with_loss_rate(1.0)
+            .expect("valid loss rate");
+
+        let experiment = ConvergenceExperiment::new(5, 2, 5, 4)
+            .expect("valid experiment")
+            .with_network_model(network);
+
+        assert_eq!(experiment.network_model().loss_rate(), 1.0);
+    }
+
+    #[test]
+    fn convergence_experiment_respects_network_model() {
+        let network = NetworkModel::new()
+            .with_loss_rate(1.0)
+            .expect("valid loss rate");
+
+        let experiment = ConvergenceExperiment::new(5, 2, 5, 4)
+            .expect("valid experiment")
+            .with_network_model(network);
+
+        let report = experiment.run();
+
+        assert_eq!(report.trials(), 4);
+        assert_eq!(report.successes(), 0);
+        assert_eq!(report.success_rate(), 0.0);
+    }
+
+    #[test]
+    fn convergence_experiment_reports_network_metrics() {
+        let network = NetworkModel::new()
+            .with_loss_rate(1.0)
+            .expect("valid loss rate");
+
+        let report = ConvergenceExperiment::new(5, 2, 3, 4)
+            .expect("valid experiment")
+            .with_network_model(network)
+            .run();
+
+        assert_eq!(report.trials(), 4);
+        assert_eq!(report.successes(), 0);
+        assert!(report.attempted() > 0);
+        assert_eq!(report.sent(), 0);
+        assert_eq!(report.dropped(), report.attempted());
+        assert_eq!(report.received(), 0);
+    }
+
+    #[test]
+    fn convergence_scenario_exposes_label_and_experiment() {
+        let experiment = ConvergenceExperiment::new(5, 2, 3, 4).expect("valid experiment");
+        let scenario = ConvergenceScenario::new("reliable", experiment);
+
+        assert_eq!(scenario.label(), "reliable");
+        assert_eq!(scenario.experiment().config().fanout(), 2);
+    }
+
+    #[test]
+    fn convergence_comparison_runs_named_experiments_in_order() {
+        let reliable = ConvergenceExperiment::new(5, 2, 5, 3)
+            .expect("valid experiment")
+            .with_seed(10);
+        let lossy_network = NetworkModel::new()
+            .with_loss_rate(1.0)
+            .expect("valid loss rate");
+        let lossy = ConvergenceExperiment::new(5, 2, 5, 3)
+            .expect("valid experiment")
+            .with_seed(10)
+            .with_network_model(lossy_network);
+
+        let comparison = ConvergenceComparison::new()
+            .add("reliable", reliable)
+            .add("lossy", lossy);
+
+        assert_eq!(comparison.len(), 2);
+        assert!(!comparison.is_empty());
+        assert_eq!(comparison.scenarios()[0].label(), "reliable");
+
+        let report = comparison.run();
+
+        assert_eq!(report.len(), 2);
+        assert!(!report.is_empty());
+        assert_eq!(report.results()[0].label(), "reliable");
+        assert_eq!(report.results()[1].label(), "lossy");
+        assert_eq!(report.results()[0].report().trials(), 3);
+        assert_eq!(report.results()[1].report().successes(), 0);
+    }
+
+    #[test]
+    fn convergence_comparison_can_add_prebuilt_scenarios() {
+        let experiment = ConvergenceExperiment::new(3, 1, 3, 2).expect("valid experiment");
+        let scenario = ConvergenceScenario::new("custom", experiment);
+        let comparison = ConvergenceComparison::new().add_scenario(scenario);
+
+        let report = comparison.run();
+
+        assert_eq!(report.results()[0].label(), "custom");
+        assert_eq!(report.results()[0].report().trials(), 2);
     }
 
     #[test]
