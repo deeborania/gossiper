@@ -2,8 +2,28 @@
 
 use crate::{
     choose_distinct_peers, Effect, GossipConfig, GossipEvent, GossipMessage, InsertOutcome,
-    MessageId, NodeId, RandomSource, Round, Rumor, RumorStore,
+    MessageId, MessageIdGenerator, NodeId, RandomSource, Round, Rumor, RumorStore,
 };
+use core::fmt;
+
+/// Error returned when publishing a batch of local rumors fails.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PublishManyError {
+    /// The message ID generator did not have enough IDs for the requested batch.
+    MessageIdGeneratorExhausted,
+}
+
+impl fmt::Display for PublishManyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MessageIdGeneratorExhausted => {
+                formatter.write_str("message ID generator exhausted")
+            }
+        }
+    }
+}
+
+impl std::error::Error for PublishManyError {}
 
 /// A transport-independent gossip node.
 ///
@@ -58,6 +78,39 @@ impl<T> GossipNode<T> {
     /// Publishes a local rumor from this node.
     pub fn publish(&mut self, id: MessageId, round: Round, payload: T) -> InsertOutcome {
         self.insert_rumor(Rumor::new(id, self.self_id.clone(), round, payload))
+    }
+
+    /// Publishes a batch of local rumors from this node.
+    ///
+    /// This method first allocates every required message ID. If the generator
+    /// is exhausted, no rumors are inserted.
+    pub fn publish_many(
+        &mut self,
+        ids: &mut MessageIdGenerator,
+        round: Round,
+        payloads: impl IntoIterator<Item = T>,
+    ) -> Result<Vec<InsertOutcome>, PublishManyError> {
+        let payloads: Vec<_> = payloads.into_iter().collect();
+        let mut allocated_ids = Vec::with_capacity(payloads.len());
+        let mut next_ids = ids.clone();
+
+        for _ in 0..payloads.len() {
+            let Some(id) = next_ids.next_id() else {
+                return Err(PublishManyError::MessageIdGeneratorExhausted);
+            };
+
+            allocated_ids.push(id);
+        }
+
+        *ids = next_ids;
+
+        let outcomes = allocated_ids
+            .into_iter()
+            .zip(payloads)
+            .map(|(id, payload)| self.publish(id, round, payload))
+            .collect();
+
+        Ok(outcomes)
     }
 
     /// Returns the number of known rumors.
@@ -149,7 +202,7 @@ mod tests {
     use super::GossipNode;
     use crate::{
         DeterministicRng, Effect, GossipConfig, GossipEvent, GossipMessage, InsertOutcome,
-        MessageId, NodeId, Round, Rumor,
+        MessageId, MessageIdGenerator, NodeId, PublishManyError, Round, Rumor,
     };
 
     fn rumor(id: u128, payload: &'static str) -> Rumor<&'static str> {
@@ -383,5 +436,58 @@ mod tests {
         assert_eq!(stored.origin(), &NodeId::from("node-a"));
         assert_eq!(stored.created_at(), Round::new(7));
         assert_eq!(stored.payload(), &"hello");
+    }
+
+    #[test]
+    fn publishes_many_local_rumors_with_generated_ids() {
+        let mut node = GossipNode::new(NodeId::from("node-a"), GossipConfig::default());
+        let mut ids = MessageIdGenerator::new(10);
+
+        let outcomes = node
+            .publish_many(&mut ids, Round::new(7), ["first", "second", "third"])
+            .expect("generator has enough IDs");
+
+        assert_eq!(
+            outcomes,
+            vec![
+                InsertOutcome::Inserted,
+                InsertOutcome::Inserted,
+                InsertOutcome::Inserted,
+            ]
+        );
+        assert_eq!(ids.peek(), Some(MessageId::new(13)));
+        assert_eq!(node.rumor_count(), 3);
+        assert_eq!(
+            node.get_rumor(MessageId::new(10))
+                .expect("rumor should exist")
+                .payload(),
+            &"first"
+        );
+        assert_eq!(
+            node.get_rumor(MessageId::new(11))
+                .expect("rumor should exist")
+                .payload(),
+            &"second"
+        );
+        assert_eq!(
+            node.get_rumor(MessageId::new(12))
+                .expect("rumor should exist")
+                .payload(),
+            &"third"
+        );
+    }
+
+    #[test]
+    fn publish_many_does_not_partially_insert_when_generator_is_exhausted() {
+        let mut node = GossipNode::new(NodeId::from("node-a"), GossipConfig::default());
+        let mut ids = MessageIdGenerator::new(u128::MAX);
+
+        let error = node
+            .publish_many(&mut ids, Round::new(7), ["first", "second"])
+            .expect_err("generator has only one ID left");
+
+        assert_eq!(error, PublishManyError::MessageIdGeneratorExhausted);
+        assert_eq!(ids.peek(), Some(MessageId::new(u128::MAX)));
+        assert_eq!(node.rumor_count(), 0);
     }
 }

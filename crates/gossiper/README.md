@@ -21,8 +21,8 @@ This crate is early and experimental. The current focus is learning, API design,
 
 ```rust
 use gossiper::{
-    apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageId, NodeId,
-    Round,
+    apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageIdGenerator,
+    NodeId, Round,
 };
 
 let config = GossipConfig::new(1, 10).expect("valid config");
@@ -35,7 +35,8 @@ let mut node_b = GossipNode::new(node_b_id.clone(), config);
 
 node_a.set_peers(vec![node_b_id.clone()]);
 
-let rumor_id = MessageId::new(1);
+let mut message_ids = MessageIdGenerator::default();
+let rumor_id = message_ids.next_id().expect("generator should have IDs");
 node_a.publish(rumor_id, Round::ZERO, "hello");
 
 let mut rng = DeterministicRng::new(1);
@@ -51,6 +52,19 @@ for message in transport.drain(&node_b_id) {
 }
 
 assert!(node_b.contains_rumor(rumor_id));
+```
+
+For multiple local rumors, keep the generator outside the node and pass it into
+the batch helper:
+
+```rust
+let mut message_ids = MessageIdGenerator::new(100);
+
+let outcomes = node_a
+    .publish_many(&mut message_ids, Round::ZERO, ["a", "b", "c"])
+    .expect("generator should have enough IDs");
+
+assert_eq!(outcomes.len(), 3);
 ```
 
 ## Features

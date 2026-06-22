@@ -1,6 +1,6 @@
 use gossiper::{
-    apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageId, NodeId,
-    Round,
+    apply_effects, DeterministicRng, GossipConfig, GossipMessage, GossipNode, MessageIdGenerator,
+    NodeId, Round,
 };
 
 fn main() {
@@ -14,7 +14,8 @@ fn main() {
 
     node_a.set_peers(vec![node_b_id.clone()]);
 
-    let rumor_id = MessageId::new(1);
+    let mut message_ids = MessageIdGenerator::default();
+    let rumor_id = message_ids.next_id().expect("generator should have IDs");
     node_a.publish(rumor_id, Round::ZERO, "cluster config changed");
 
     let mut rng = DeterministicRng::new(1);

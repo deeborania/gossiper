@@ -76,9 +76,54 @@ impl fmt::Display for MessageId {
     }
 }
 
+/// Monotonic generator for caller-owned message identifiers.
+///
+/// `GossipNode` deliberately does not create IDs internally. Applications often
+/// need IDs to be stable across restarts, logs, storage, and multiple local
+/// producers. This helper is useful for tests, examples, and applications that
+/// only need deterministic in-process IDs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MessageIdGenerator {
+    next: Option<u128>,
+}
+
+impl MessageIdGenerator {
+    /// Creates a generator whose first generated ID is `start`.
+    pub fn new(start: u128) -> Self {
+        Self { next: Some(start) }
+    }
+
+    /// Creates a generator whose first generated ID is `1`.
+    pub fn starting_at_one() -> Self {
+        Self::new(1)
+    }
+
+    /// Returns the next ID that would be generated, if the generator is not exhausted.
+    pub fn peek(&self) -> Option<MessageId> {
+        self.next.map(MessageId::new)
+    }
+
+    /// Generates the next ID.
+    ///
+    /// Returns `None` after generating `u128::MAX`, because there is no larger
+    /// numeric ID to generate without wrapping.
+    pub fn next_id(&mut self) -> Option<MessageId> {
+        let current = self.next?;
+        let id = MessageId::new(current);
+        self.next = current.checked_add(1);
+        Some(id)
+    }
+}
+
+impl Default for MessageIdGenerator {
+    fn default() -> Self {
+        Self::starting_at_one()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MessageId, NodeId};
+    use super::{MessageId, MessageIdGenerator, NodeId};
 
     #[test]
     fn node_id_can_be_created_from_str() {
@@ -101,5 +146,31 @@ mod tests {
 
         assert_eq!(id.get(), 42);
         assert_eq!(id.to_string(), "42");
+    }
+
+    #[test]
+    fn message_id_generator_starts_at_configured_value() {
+        let mut generator = MessageIdGenerator::new(10);
+
+        assert_eq!(generator.peek(), Some(MessageId::new(10)));
+        assert_eq!(generator.next_id(), Some(MessageId::new(10)));
+        assert_eq!(generator.next_id(), Some(MessageId::new(11)));
+        assert_eq!(generator.peek(), Some(MessageId::new(12)));
+    }
+
+    #[test]
+    fn message_id_generator_defaults_to_one() {
+        let mut generator = MessageIdGenerator::default();
+
+        assert_eq!(generator.next_id(), Some(MessageId::new(1)));
+    }
+
+    #[test]
+    fn message_id_generator_stops_before_overflow() {
+        let mut generator = MessageIdGenerator::new(u128::MAX);
+
+        assert_eq!(generator.next_id(), Some(MessageId::new(u128::MAX)));
+        assert_eq!(generator.next_id(), None);
+        assert_eq!(generator.peek(), None);
     }
 }
