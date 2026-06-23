@@ -29,6 +29,11 @@ Use this crate directly when you specifically want the lower-level core API.
 - bounded rumor storage
 - logical-round retention
 - deterministic peer selection hooks
+- anti-entropy digest/delta traits
+- `IdSetDigest`
+- `AntiEntropyMessage`
+- `MergeReport`
+- digest/delta/merge helper functions
 
 ## Example
 
@@ -50,6 +55,44 @@ let mut rng = DeterministicRng::new(1);
 let effects = node.tick(&mut rng, Round::ZERO);
 
 assert_eq!(effects.len(), 1);
+```
+
+## Anti-Entropy Example
+
+Anti-entropy lets one node send a compact summary of what it already knows, so
+another node can send back only the missing items.
+
+```rust
+use gossiper_core::{
+    delta_message, merge_delta, AntiEntropyMessage, IdSetDigest, MessageId, NodeId, Round, Rumor,
+    RumorStore,
+};
+
+let mut node_a = RumorStore::new(8);
+let mut node_b = RumorStore::new(8);
+
+let first = Rumor::new(MessageId::new(1), NodeId::from("node-a"), Round::ZERO, "one");
+let second = Rumor::new(MessageId::new(2), NodeId::from("node-a"), Round::ZERO, "two");
+
+node_a.insert(first.clone());
+node_a.insert(second);
+node_b.insert(first);
+
+let node_b_digest = IdSetDigest::from_ids([MessageId::new(1)]);
+let message = delta_message(&node_a, &node_b_digest);
+
+if let AntiEntropyMessage::Delta(items) = message {
+    let report = merge_delta(&mut node_b, items);
+
+    assert_eq!(report.changed(), 1);
+    assert!(node_b.contains(MessageId::new(2)));
+}
+```
+
+Run the full example with:
+
+```bash
+cargo run -p gossiper-core --example anti_entropy
 ```
 
 ## Features

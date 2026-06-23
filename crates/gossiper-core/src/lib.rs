@@ -7,6 +7,7 @@
 //! on an async runtime. It models protocol state and returns effects for a
 //! runtime or simulator to execute.
 
+mod anti_entropy;
 mod config;
 mod effect;
 mod event;
@@ -19,6 +20,10 @@ mod rumor;
 mod rumor_store;
 mod time;
 
+pub use anti_entropy::{
+    delta_message, digest_message, merge_delta, AntiEntropyMessage, DeltaStore, Digest,
+    IdSetDigest, Merge, MergeOutcome, MergeReport,
+};
 pub use config::{ConfigError, GossipConfig};
 pub use effect::Effect;
 pub use event::GossipEvent;
@@ -34,9 +39,10 @@ pub use time::{Round, Timestamp};
 #[cfg(test)]
 mod tests {
     use super::{
-        choose_distinct_peers, DeterministicRng, Effect, GossipConfig, GossipMessage, GossipNode,
-        InsertOutcome, MessageId, MessageIdGenerator, NodeId, PublishManyError, RandomSource,
-        Round, Rumor, RumorStore, Timestamp,
+        choose_distinct_peers, delta_message, digest_message, merge_delta, AntiEntropyMessage,
+        DeltaStore, DeterministicRng, Digest, Effect, GossipConfig, GossipMessage, GossipNode,
+        IdSetDigest, InsertOutcome, MergeOutcome, MessageId, MessageIdGenerator, NodeId,
+        PublishManyError, RandomSource, Round, Rumor, RumorStore, Timestamp,
     };
 
     #[test]
@@ -71,6 +77,19 @@ mod tests {
         assert_eq!(now.as_millis(), 1_000);
         assert_eq!(rumor.payload(), &"hello");
         assert_eq!(store.insert(rumor), InsertOutcome::Inserted);
+        let digest = IdSetDigest::from_ids([MessageId::new(7)]);
+        let anti_entropy_message: AntiEntropyMessage<_, Rumor<&str>> =
+            AntiEntropyMessage::digest(digest.clone());
+        assert!(digest.contains(&MessageId::new(7)));
+        assert_eq!(anti_entropy_message.delta_len(), 0);
+        assert_eq!(store.digest().len(), 1);
+        assert_eq!(digest_message(&store).delta_len(), 0);
+        assert_eq!(delta_message(&store, &digest).delta_len(), 0);
+        assert_eq!(
+            merge_delta(&mut store, Vec::<Rumor<&str>>::new()).total(),
+            0
+        );
+        assert_eq!(MergeOutcome::Changed, MergeOutcome::Changed);
         assert!(rng.index(10).expect("non-empty range") < 10);
         assert_eq!(
             choose_distinct_peers(&mut rng, &node, &peers, 1),

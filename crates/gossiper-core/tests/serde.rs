@@ -1,8 +1,8 @@
 #![cfg(feature = "serde")]
 
 use gossiper_core::{
-    ConfigError, GossipConfig, GossipEvent, GossipMessage, InsertOutcome, MessageId,
-    MessageIdGenerator, NodeId, Round, Rumor, Timestamp,
+    AntiEntropyMessage, ConfigError, Digest, GossipConfig, GossipEvent, GossipMessage, IdSetDigest,
+    InsertOutcome, MergeReport, MessageId, MessageIdGenerator, NodeId, Round, Rumor, Timestamp,
 };
 
 #[test]
@@ -73,6 +73,68 @@ fn round_trips_events_and_insert_outcomes() {
     let decoded: InsertOutcome = serde_json::from_str(&encoded).expect("deserialize");
 
     assert_eq!(decoded, outcome);
+}
+
+#[test]
+fn round_trips_anti_entropy_digest() {
+    let digest = IdSetDigest::from_ids([MessageId::new(1), MessageId::new(2)]);
+
+    let encoded = serde_json::to_string(&digest).expect("serialize");
+    let decoded: IdSetDigest<MessageId> = serde_json::from_str(&encoded).expect("deserialize");
+
+    assert!(decoded.contains(&MessageId::new(1)));
+    assert!(decoded.contains(&MessageId::new(2)));
+    assert!(!decoded.contains(&MessageId::new(3)));
+}
+
+#[test]
+fn round_trips_anti_entropy_messages() {
+    let digest = IdSetDigest::from_ids([MessageId::new(1), MessageId::new(2)]);
+    let digest_message: AntiEntropyMessage<_, Rumor<String>> = AntiEntropyMessage::digest(digest);
+
+    let encoded = serde_json::to_string(&digest_message).expect("serialize");
+    let decoded: AntiEntropyMessage<IdSetDigest<MessageId>, Rumor<String>> =
+        serde_json::from_str(&encoded).expect("deserialize");
+
+    match decoded {
+        AntiEntropyMessage::Digest(digest) => {
+            assert!(digest.contains(&MessageId::new(1)));
+            assert!(digest.contains(&MessageId::new(2)));
+        }
+        AntiEntropyMessage::Delta(_) => panic!("expected digest message"),
+    }
+
+    let delta_message: AntiEntropyMessage<IdSetDigest<MessageId>, _> =
+        AntiEntropyMessage::delta(vec![Rumor::new(
+            MessageId::new(3),
+            NodeId::from("node-a"),
+            Round::ZERO,
+            "payload".to_string(),
+        )]);
+
+    let encoded = serde_json::to_string(&delta_message).expect("serialize");
+    let decoded: AntiEntropyMessage<IdSetDigest<MessageId>, Rumor<String>> =
+        serde_json::from_str(&encoded).expect("deserialize");
+
+    match decoded {
+        AntiEntropyMessage::Digest(_) => panic!("expected delta message"),
+        AntiEntropyMessage::Delta(items) => {
+            assert_eq!(items.len(), 1);
+            assert_eq!(items[0].id(), MessageId::new(3));
+            assert_eq!(items[0].payload(), "payload");
+        }
+    }
+}
+
+#[test]
+fn round_trips_merge_report() {
+    let report = MergeReport::default();
+
+    let encoded = serde_json::to_string(&report).expect("serialize");
+    let decoded: MergeReport = serde_json::from_str(&encoded).expect("deserialize");
+
+    assert_eq!(decoded, report);
+    assert_eq!(decoded.total(), 0);
 }
 
 #[test]
