@@ -155,6 +155,9 @@ reference lives in the rustdoc (`cargo doc --workspace --open`).
 ```bash
 cargo run -p gossiper --example basic_gossip
 cargo run -p gossiper-core --example anti_entropy
+cargo run -p gossiper-core --example grow_only_counter
+cargo run -p gossiper-core --example grow_only_set
+cargo run -p gossiper-core --example versioned_kv
 cargo run -p gossiper --features sim --example sim_network
 ```
 

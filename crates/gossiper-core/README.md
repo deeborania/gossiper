@@ -93,6 +93,9 @@ Run the full example with:
 
 ```bash
 cargo run -p gossiper-core --example anti_entropy
+cargo run -p gossiper-core --example grow_only_counter
+cargo run -p gossiper-core --example grow_only_set
+cargo run -p gossiper-core --example versioned_kv
 ```
 
 ## Features
